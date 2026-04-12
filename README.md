@@ -1,7 +1,8 @@
 # chat-to-md
 
 Local-only Chrome MV3 extension for curating one ChatGPT or Qianwen conversation into Markdown.
-———— 千问的部分还没测试过，gpt的确认可用，欢迎大家多多使用
+——— 千问的部分还没测试过，gpt的确认可用，欢迎大家多多使用
+
 
 
 ## Load Unpacked
