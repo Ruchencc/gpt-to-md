@@ -19,29 +19,16 @@ export function createSeedDocument() {
           {
             id: "m1",
             title: "Response",
-            blocks: [
-              {
-                id: "b1",
-                type: "paragraph",
-                text:
-                  "Most conversations fail at the handoff stage. 当下看起来很有帮助的回答，往往并不是为了 later retrieval、快速扫描或二次整理而写的。"
-              },
-              {
-                id: "b2",
-                type: "list",
-                items: [
-                  "No stable 文档标题 or file name",
-                  "Topics 之间的 section boundary 太弱",
-                  "Follow-up turns 把最好的 insight 埋掉了",
-                  "Formatting 更适合 chat，不适合 later reference"
-                ]
-              },
-              {
-                id: "b3",
-                type: "quote",
-                text: "The core issue is not lack of information. 真正缺的是 editorial structure。"
-              }
-            ]
+            content: [
+              "Most conversations fail at the handoff stage. 当下看起来很有帮助的回答，往往并不是为了 later retrieval、快速扫描或二次整理而写的。",
+              "",
+              "- No stable 文档标题 or file name",
+              "- Topics 之间的 section boundary 太弱",
+              "- Follow-up turns 把最好的 insight 埋掉了",
+              "- Formatting 更适合 chat，不适合 later reference",
+              "",
+              "> The core issue is not lack of information. 真正缺的是 editorial structure。"
+            ].join("\n")
           }
         ]
       },
@@ -57,32 +44,25 @@ export function createSeedDocument() {
           {
             id: "m2",
             title: "Interaction model",
-            blocks: [
-              {
-                id: "b4",
-                type: "paragraph",
-                text:
-                  "The editing model should work on grouped question-answer pairs, not isolated messages. 这样文档的 narrative spine 会更稳。"
-              }
-            ]
+            content:
+              "The editing model should work on grouped question-answer pairs, not isolated messages. 这样文档的 narrative spine 会更稳。"
           },
           {
             id: "m3",
             title: "Data shape",
-            blocks: [
-              {
-                id: "b5",
-                type: "code",
-                code:
-                  "type ExportGroup = {\n  id: string;\n  included: boolean;\n  title: string;\n  notes: string;\n  modules: Array<ExportModule>;\n};"
-              },
-              {
-                id: "b6",
-                type: "paragraph",
-                text:
-                  "A split interface works well: 左边 cards 用来编辑，右边放 rendered preview，再加一个小型 parameter lab 专门调节视觉参数。"
-              }
-            ]
+            content: [
+              "```",
+              "type ExportGroup = {",
+              "  id: string;",
+              "  included: boolean;",
+              "  title: string;",
+              "  notes: string;",
+              "  modules: Array<ExportModule>;",
+              "};",
+              "```",
+              "",
+              "A split interface works well: 左边 cards 用来编辑，右边放 rendered preview，再加一个小型 parameter lab 专门调节视觉参数。"
+            ].join("\n")
           }
         ]
       }

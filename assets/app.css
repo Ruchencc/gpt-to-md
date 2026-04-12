@@ -54,6 +54,7 @@
 html,
 body {
   margin: 0;
+  height: 100%;
   min-height: 100%;
 }
 
@@ -93,7 +94,6 @@ textarea {
 }
 
 .workspace {
-  min-height: calc(100vh - 32px);
   position: relative;
 }
 
@@ -189,27 +189,51 @@ textarea {
   gap: 8px;
 }
 
-.outline-link {
+.outline-item {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
-  text-decoration: none;
-  color: var(--text-soft);
   padding: 10px 12px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--bg-soft) 78%, transparent);
   border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  min-width: 0;
+  cursor: pointer;
 }
 
-.outline-link.active {
-  color: #ffffff;
+.outline-item.active {
   background: color-mix(in srgb, var(--accent) 18%, var(--bg-soft));
   border-color: color-mix(in srgb, var(--accent) 42%, transparent);
 }
 
-:root[data-theme="light"] .outline-link.active {
-  color: var(--text);
+.outline-jump,
+.outline-delete-button {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.outline-jump {
+  display: inline-flex;
+}
+
+.outline-title-input {
+  width: 100%;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  line-height: 1.35;
+  padding: 0;
+}
+
+.outline-item.active .outline-title-input {
+  color: #ffffff;
 }
 
 .outline-index {
@@ -224,20 +248,39 @@ textarea {
   background: color-mix(in srgb, var(--bg-elevated) 90%, transparent);
 }
 
-.outline-link.active .outline-index {
+.outline-item.active .outline-index {
   color: #ffffff;
   background: var(--accent);
 }
 
-.outline-text {
-  min-width: 0;
-  overflow-wrap: anywhere;
+.outline-delete-button {
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1;
+  padding: 6px 0 6px 6px;
+  white-space: nowrap;
 }
 
-.floating-back-button {
+:root[data-theme="light"] .outline-item.active .outline-title-input {
+  color: var(--text);
+}
+
+.floating-outline-shell {
   position: fixed;
   left: 16px;
   bottom: 16px;
+  z-index: 999;
+  display: none;
+  flex-direction: column-reverse;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.floating-outline-shell.visible {
+  display: flex;
+}
+
+.floating-outline-launcher {
   appearance: none;
   border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   border-radius: 999px;
@@ -249,7 +292,47 @@ textarea {
   font-size: 13px;
   line-height: 1;
   cursor: pointer;
-  z-index: 999;
+}
+
+.floating-back-button {
+  appearance: none;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  color: var(--text);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--shadow) 42%, transparent);
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.floating-outline-panel {
+  display: none;
+  width: clamp(220px, 33vw, 320px);
+  max-height: min(60vh, 640px);
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--shadow) 46%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.floating-outline-shell.open .floating-outline-panel {
+  display: block;
+}
+
+.floating-outline-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .workspace-meta {
@@ -419,6 +502,24 @@ textarea {
   color: var(--text-soft);
   overflow-wrap: break-word;
   text-wrap: pretty;
+  min-width: 0;
+}
+
+.module-editor {
+  display: block;
+  width: 100%;
+  min-height: 180px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  color: var(--text-soft);
+  font-family: var(--code-font);
+  font-size: 11px;
+  line-height: 1.6;
+  resize: vertical;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
   min-width: 0;
 }
 
