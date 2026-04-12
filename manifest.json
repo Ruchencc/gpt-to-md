@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "chat-to-md",
+  "version": "0.1.0",
+  "description": "Curate one ChatGPT or Qianwen conversation into clean Markdown.",
+  "permissions": ["sidePanel", "tabs", "storage"],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://www.qianwen.com/*"
+  ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["preview.html", "assets/app.css"],
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://www.qianwen.com/*"
+      ]
+    }
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://www.qianwen.com/*"
+      ],
+      "js": [
+        "src/content/adapters/chatgpt.js",
+        "src/content/adapters/qianwen.js",
+        "src/content/content-script.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "chat-to-md"
+  }
+}
