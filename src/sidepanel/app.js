@@ -1,17 +1,25 @@
 import { defaultPreset } from "../shared/default-preset.js";
+import { getJumpScrollTop, getObservedScrollTop, shouldShowFloatingTools } from "../shared/floating-ui.js";
 import { createInitialState } from "../shared/model.js";
 import { exportMarkdown } from "../shared/export-markdown.js";
+import { getGroupDisplayTitle } from "../shared/group-title.js";
 import { runtimeMessages } from "../shared/messages.js";
 
 const app = document.getElementById("app");
 const PREVIEW_STORAGE_KEY = "chat-export-preview-document";
+const EDITOR_STORAGE_KEY = "chat-to-md-editor-state";
+const FLOATING_OUTLINE_THRESHOLD = 180;
 
 const state = {
   preset: structuredClone(defaultPreset),
   document: createInitialState(),
   activeTabId: null,
-  activeGroupId: null
+  activeGroupId: null,
+  floatingOutlineOpen: false,
+  showFloatingOutline: false
 };
+
+let persistTimer = null;
 
 function escapeHtml(value) {
   return String(value)
@@ -20,22 +28,6 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
-}
-
-function renderBlockBody(block) {
-  if (block.type === "paragraph") return `<p>${escapeHtml(block.text)}</p>`;
-  if (block.type === "quote") return `<blockquote>${escapeHtml(block.text)}</blockquote>`;
-  if (block.type === "list") {
-    return `<ul>${block.items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
-  }
-  if (block.type === "code") {
-    return `<pre><code>${escapeHtml(block.code)}</code></pre>`;
-  }
-  return "";
-}
-
-function renderModuleBody(module) {
-  return module.blocks.map((block) => renderBlockBody(block)).join("");
 }
 
 function applyPreset() {
@@ -50,6 +42,22 @@ function applyPreset() {
         : "";
     root.style.setProperty(`--${key}`, `${value}${unit}`);
   });
+}
+
+function schedulePersist() {
+  if (typeof chrome === "undefined" || !chrome.storage?.local) return;
+
+  if (persistTimer) clearTimeout(persistTimer);
+
+  persistTimer = setTimeout(async () => {
+    await chrome.storage.local.set({
+      [EDITOR_STORAGE_KEY]: {
+        theme: state.preset.theme,
+        activeGroupId: state.activeGroupId,
+        document: state.document
+      }
+    });
+  }, 150);
 }
 
 function downloadMarkdownFile() {
@@ -82,13 +90,75 @@ async function openPreviewTab() {
   });
 }
 
+function getScrollSnapshot() {
+  const scrollHost = document.querySelector(".workspace-scroll");
+  return {
+    scrollTop: scrollHost?.scrollTop ?? 0,
+    pageScrollTop: window.scrollY ?? document.documentElement?.scrollTop ?? document.body?.scrollTop ?? 0
+  };
+}
+
+function restoreScrollSnapshot(snapshot) {
+  if (!snapshot) return;
+
+  requestAnimationFrame(() => {
+    const scrollHost = document.querySelector(".workspace-scroll");
+    if (scrollHost) {
+      scrollHost.scrollTop = snapshot.scrollTop;
+    }
+    window.scrollTo({ top: snapshot.pageScrollTop, behavior: "auto" });
+    updateFloatingOutlineVisibility(scrollHost);
+  });
+}
+
+function renderOutlineItems(scope) {
+  return state.document.groups
+    .map(
+      (group, index) => `
+        <div
+          class="outline-item ${state.activeGroupId === group.id ? "active" : ""}"
+          data-outline-item
+          data-group-anchor="${group.id}"
+          data-outline-scope="${scope}"
+        >
+          <button
+            class="outline-jump"
+            type="button"
+            data-action="jump-group"
+            data-group-id="${group.id}"
+            aria-label="Jump to ${escapeHtml(getGroupDisplayTitle(group))}"
+          >
+            <span class="outline-index">${index + 1}</span>
+          </button>
+          <input
+            class="outline-title-input"
+            type="text"
+            value="${escapeHtml(getGroupDisplayTitle(group))}"
+            data-action="edit-title"
+            data-group-id="${group.id}"
+          />
+          <button
+            class="outline-delete-button"
+            type="button"
+            data-action="delete-group"
+            data-group-id="${group.id}"
+            aria-label="Delete ${escapeHtml(getGroupDisplayTitle(group))}"
+          >
+            Delete
+          </button>
+        </div>
+      `
+    )
+    .join("");
+}
+
 function groupCard(group) {
   return `
     <article class="group-card ${group.included ? "" : "excluded"}" data-group-id="${group.id}" id="group-${group.id}">
       <div class="group-card-header">
         <input class="checkbox" type="checkbox" ${group.included ? "checked" : ""} data-action="toggle-group" data-group-id="${group.id}" />
         <div>
-          <input class="group-title-input" type="text" value="${escapeHtml(group.title)}" data-action="edit-title" data-group-id="${group.id}" />
+          <input class="group-title-input" type="text" value="${escapeHtml(getGroupDisplayTitle(group))}" data-action="edit-title" data-group-id="${group.id}" />
           <textarea class="notes-input" data-action="edit-notes" data-group-id="${group.id}" placeholder="Add note for this section...">${escapeHtml(group.notes)}</textarea>
         </div>
         <button class="icon-button danger" type="button" data-action="delete-group" data-group-id="${group.id}">Delete</button>
@@ -108,7 +178,13 @@ function groupCard(group) {
                   <span class="block-tag">${escapeHtml(module.title || "Response")}</span>
                   <button class="ghost-button danger" type="button" data-action="delete-module" data-group-id="${group.id}" data-module-id="${module.id}">Remove module</button>
                 </div>
-                <div class="block-body">${renderModuleBody(module)}</div>
+                <textarea
+                  class="module-editor"
+                  data-action="edit-module-content"
+                  data-group-id="${group.id}"
+                  data-module-id="${module.id}"
+                  spellcheck="false"
+                >${escapeHtml(module.content || "")}</textarea>
               </div>
             `
           )
@@ -118,11 +194,39 @@ function groupCard(group) {
   `;
 }
 
-function render() {
+function renderFloatingOutline() {
+  return `
+    <div class="floating-outline-shell ${state.showFloatingOutline ? "visible" : ""} ${state.floatingOutlineOpen ? "open" : ""}" id="floatingOutlineShell">
+      <button class="floating-back-button" id="backToOutlineButton" type="button">Back to top</button>
+      <button class="floating-outline-launcher" id="floatingOutlineToggleButton" type="button">
+        ${state.floatingOutlineOpen ? "Close" : "Outline"}
+      </button>
+      <section class="floating-outline-panel" aria-label="Quick conversation outline">
+        <div class="floating-outline-panel-header">
+          <span>Quick outline</span>
+          <button class="ghost-button" id="floatingOutlineTopButton" type="button">Top</button>
+        </div>
+        <nav class="outline-nav floating-outline-nav" aria-label="Floating conversation outline">
+          ${renderOutlineItems("floating")}
+        </nav>
+      </section>
+    </div>
+  `;
+}
+
+function render(options = {}) {
+  const snapshot = options.preserveScroll ? getScrollSnapshot() : null;
+
   applyPreset();
 
   if (!state.activeGroupId && state.document.groups.length) {
     state.activeGroupId = state.document.groups[0].id;
+  }
+
+  if (!state.document.groups.length) {
+    state.activeGroupId = null;
+    state.floatingOutlineOpen = false;
+    state.showFloatingOutline = false;
   }
 
   app.innerHTML = `
@@ -141,16 +245,7 @@ function render() {
         <div class="action-feedback" id="actionFeedback">Click Load This Page while a ChatGPT or Qianwen conversation tab is active.</div>
         <input id="docTitle" class="title-input" type="text" value="${escapeHtml(state.document.title)}" />
         <nav class="outline-nav" aria-label="Conversation outline">
-          ${state.document.groups
-            .map(
-              (group, index) => `
-                <a class="outline-link ${state.activeGroupId === group.id ? "active" : ""}" href="#group-${group.id}" data-group-anchor="${group.id}">
-                  <span class="outline-index">${index + 1}</span>
-                  <span class="outline-text">${escapeHtml(group.question || group.title)}</span>
-                </a>
-              `
-            )
-            .join("")}
+          ${renderOutlineItems("top")}
         </nav>
       </header>
       <div class="workspace-scroll">
@@ -158,11 +253,12 @@ function render() {
           ${state.document.groups.map((group) => groupCard(group)).join("")}
         </section>
       </div>
-      <button class="floating-back-button" id="backToOutlineButton" type="button">Back to top</button>
+      ${renderFloatingOutline()}
     </main>
   `;
 
   bindEvents();
+  restoreScrollSnapshot(snapshot);
 }
 
 function feedback(message) {
@@ -170,9 +266,107 @@ function feedback(message) {
   if (node) node.textContent = message;
 }
 
+function syncGroupTitleInputs(groupId, value, source) {
+  document.querySelectorAll(`[data-action="edit-title"][data-group-id="${groupId}"]`).forEach((input) => {
+    if (input !== source) input.value = value;
+  });
+}
+
+function updateGroupTitle(groupId, value, source) {
+  const group = state.document.groups.find((item) => item.id === groupId);
+  if (!group) return;
+  group.title = value;
+  syncGroupTitleInputs(groupId, value, source);
+  schedulePersist();
+}
+
+function updateOutlineHighlight(groupId) {
+  state.activeGroupId = groupId;
+  document.querySelectorAll("[data-outline-item]").forEach((item) => {
+    item.classList.toggle("active", item.dataset.groupAnchor === groupId);
+  });
+}
+
+function jumpToTop() {
+  const scrollHost = document.querySelector(".workspace-scroll");
+  scrollHost?.scrollTo({ top: 0, behavior: "smooth" });
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  state.floatingOutlineOpen = false;
+  updateFloatingOutlineShell();
+}
+
+function jumpToGroup(groupId) {
+  const scrollHost = document.querySelector(".workspace-scroll");
+  const target = document.getElementById(`group-${groupId}`);
+  if (!target) return;
+
+  if (scrollHost) {
+    const top = getJumpScrollTop({
+      hostTop: scrollHost.getBoundingClientRect().top,
+      targetTop: target.getBoundingClientRect().top,
+      currentScrollTop: scrollHost.scrollTop
+    });
+    scrollHost.scrollTo({ top, behavior: "smooth" });
+  }
+
+  const pageTop = window.scrollY + target.getBoundingClientRect().top - 8;
+  window.scrollTo({ top: Math.max(0, pageTop), behavior: "smooth" });
+  updateOutlineHighlight(groupId);
+  schedulePersist();
+}
+
+function updateFloatingOutlineShell() {
+  const shell = document.getElementById("floatingOutlineShell");
+  const launcher = document.getElementById("floatingOutlineToggleButton");
+
+  if (!shell || !launcher) return;
+
+  shell.classList.toggle("visible", state.showFloatingOutline);
+  shell.classList.toggle("open", state.floatingOutlineOpen);
+  launcher.textContent = state.floatingOutlineOpen ? "Close" : "Outline";
+}
+
+function updateFloatingOutlineVisibility(scrollHost = document.querySelector(".workspace-scroll")) {
+  const nextVisible = shouldShowFloatingTools(
+    getObservedScrollTop(
+      scrollHost?.scrollTop,
+      window.scrollY,
+      document.documentElement?.scrollTop,
+      document.body?.scrollTop
+    ),
+    state.document.groups.length,
+    FLOATING_OUTLINE_THRESHOLD
+  );
+  if (state.showFloatingOutline === nextVisible) return;
+
+  state.showFloatingOutline = nextVisible;
+  if (!nextVisible) {
+    state.floatingOutlineOpen = false;
+  }
+  updateFloatingOutlineShell();
+}
+
+function deleteGroup(groupId, options = {}) {
+  state.document.groups = state.document.groups.filter((item) => item.id !== groupId);
+  if (state.activeGroupId === groupId) {
+    state.activeGroupId = state.document.groups[0]?.id || null;
+  }
+  schedulePersist();
+  render({ preserveScroll: options.preserveScroll ?? true });
+}
+
+function deleteModule(groupId, moduleId) {
+  const group = state.document.groups.find((item) => item.id === groupId);
+  if (!group) return;
+  group.modules = group.modules.filter((item) => item.id !== moduleId);
+  schedulePersist();
+  render({ preserveScroll: true });
+}
+
 function bindEvents() {
   document.getElementById("docTitle").addEventListener("input", (event) => {
     state.document.title = event.target.value;
+    schedulePersist();
   });
 
   document.getElementById("loadThisPageButton").addEventListener("click", async () => {
@@ -191,70 +385,94 @@ function bindEvents() {
 
   document.getElementById("themeToggleButton").addEventListener("click", () => {
     state.preset.theme = state.preset.theme === "dark" ? "light" : "dark";
-    render();
+    schedulePersist();
+    render({ preserveScroll: true });
   });
 
-  document.getElementById("backToOutlineButton").addEventListener("click", () => {
-    const scrollHost = document.querySelector(".workspace-scroll");
-    scrollHost?.scrollTo({ top: 0, behavior: "smooth" });
-    document.getElementById("outline-top")?.scrollIntoView({ block: "start" });
+  document.getElementById("backToOutlineButton")?.addEventListener("click", () => {
+    jumpToTop();
+  });
+
+  document.getElementById("floatingOutlineToggleButton")?.addEventListener("click", () => {
+    state.floatingOutlineOpen = !state.floatingOutlineOpen;
+    updateFloatingOutlineShell();
+  });
+
+  document.getElementById("floatingOutlineTopButton")?.addEventListener("click", () => {
+    jumpToTop();
   });
 
   document.querySelectorAll("[data-action='toggle-group']").forEach((checkbox) => {
     checkbox.addEventListener("input", (event) => {
       const group = state.document.groups.find((item) => item.id === event.target.dataset.groupId);
+      if (!group) return;
       group.included = event.target.checked;
       event.target.closest(".group-card")?.classList.toggle("excluded", !group.included);
+      schedulePersist();
     });
   });
 
   document.querySelectorAll("[data-action='edit-title']").forEach((input) => {
     input.addEventListener("input", (event) => {
-      const group = state.document.groups.find((item) => item.id === event.target.dataset.groupId);
-      group.title = event.target.value;
+      updateGroupTitle(event.target.dataset.groupId, event.target.value, event.target);
     });
   });
 
   document.querySelectorAll("[data-action='edit-notes']").forEach((input) => {
     input.addEventListener("input", (event) => {
       const group = state.document.groups.find((item) => item.id === event.target.dataset.groupId);
+      if (!group) return;
       group.notes = event.target.value;
+      schedulePersist();
+    });
+  });
+
+  document.querySelectorAll("[data-action='edit-module-content']").forEach((input) => {
+    input.addEventListener("input", (event) => {
+      const group = state.document.groups.find((item) => item.id === event.target.dataset.groupId);
+      const module = group?.modules.find((item) => item.id === event.target.dataset.moduleId);
+      if (!module) return;
+      module.content = event.target.value;
+      schedulePersist();
     });
   });
 
   document.querySelectorAll("[data-action='delete-group']").forEach((button) => {
     button.addEventListener("click", (event) => {
-      state.document.groups = state.document.groups.filter((item) => item.id !== event.target.dataset.groupId);
-      if (state.activeGroupId === event.target.dataset.groupId) {
-        state.activeGroupId = state.document.groups[0]?.id || null;
-      }
-      render();
+      deleteGroup(event.currentTarget.dataset.groupId);
     });
   });
 
   document.querySelectorAll("[data-action='delete-module']").forEach((button) => {
     button.addEventListener("click", (event) => {
-      const group = state.document.groups.find((item) => item.id === event.target.dataset.groupId);
-      group.modules = group.modules.filter((item) => item.id !== event.target.dataset.moduleId);
-      render();
+      deleteModule(event.currentTarget.dataset.groupId, event.currentTarget.dataset.moduleId);
+    });
+  });
+
+  document.querySelectorAll("[data-action='jump-group']").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      jumpToGroup(event.currentTarget.dataset.groupId);
+    });
+  });
+
+  document.querySelectorAll("[data-outline-item]").forEach((item) => {
+    item.addEventListener("click", (event) => {
+      if (event.target.closest("input, button")) return;
+      jumpToGroup(item.dataset.groupAnchor);
     });
   });
 
   setupOutlineTracking();
 }
 
-function updateOutlineHighlight(groupId) {
-  state.activeGroupId = groupId;
-  document.querySelectorAll("[data-group-anchor]").forEach((link) => {
-    link.classList.toggle("active", link.dataset.groupAnchor === groupId);
-  });
-}
-
 function setupOutlineTracking() {
   const scrollHost = document.querySelector(".workspace-scroll");
   const groupNodes = Array.from(document.querySelectorAll(".group-card"));
 
-  if (!scrollHost || !groupNodes.length) return;
+  if (!scrollHost || !groupNodes.length) {
+    updateFloatingOutlineVisibility(scrollHost);
+    return;
+  }
 
   const syncActiveGroup = () => {
     const hostTop = scrollHost.getBoundingClientRect().top;
@@ -271,16 +489,14 @@ function setupOutlineTracking() {
 
     if (bestId && bestId !== state.activeGroupId) {
       updateOutlineHighlight(bestId);
+      schedulePersist();
     }
+
+    updateFloatingOutlineVisibility(scrollHost);
   };
 
   scrollHost.addEventListener("scroll", syncActiveGroup, { passive: true });
-  document.querySelectorAll("[data-group-anchor]").forEach((link) => {
-    link.addEventListener("click", () => {
-      const targetId = link.dataset.groupAnchor;
-      if (targetId) updateOutlineHighlight(targetId);
-    });
-  });
+  window.addEventListener("scroll", syncActiveGroup, { passive: true });
   syncActiveGroup();
 }
 
@@ -314,8 +530,30 @@ async function refreshFromActiveTab() {
   if (!state.document.title) {
     state.document.title = state.preset.docTitle;
   }
+  state.activeGroupId = state.document.groups[0]?.id || null;
+  state.floatingOutlineOpen = false;
+  schedulePersist();
   render();
   feedback(`Loaded ${state.document.groups.length} question-answer groups from the page.`);
 }
 
-render();
+async function restoreEditorState() {
+  if (typeof chrome === "undefined" || !chrome.storage?.local) return;
+
+  const stored = await chrome.storage.local.get(EDITOR_STORAGE_KEY);
+  const payload = stored[EDITOR_STORAGE_KEY];
+  if (!payload?.document) return;
+
+  state.document = payload.document;
+  state.activeGroupId = payload.activeGroupId || payload.document.groups?.[0]?.id || null;
+  if (payload.theme) {
+    state.preset.theme = payload.theme;
+  }
+}
+
+async function boot() {
+  await restoreEditorState();
+  render();
+}
+
+boot();

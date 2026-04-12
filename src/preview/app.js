@@ -1,3 +1,5 @@
+import { getGroupDisplayTitle } from "../shared/group-title.js";
+
 const PREVIEW_STORAGE_KEY = "chat-export-preview-document";
 
 function escapeHtml(value) {
@@ -9,25 +11,9 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
-function renderBlockBody(block) {
-  if (block.type === "paragraph") return `<p>${escapeHtml(block.text)}</p>`;
-  if (block.type === "quote") return `<blockquote>${escapeHtml(block.text)}</blockquote>`;
-  if (block.type === "list") {
-    return `<ul>${block.items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
-  }
-  if (block.type === "code") {
-    return `<pre><code>${escapeHtml(block.code)}</code></pre>`;
-  }
-  return "";
-}
-
-function renderModuleBody(module) {
-  const parts = [];
-  if (module.title && module.title !== "Response") {
-    parts.push(`<h3>${escapeHtml(module.title)}</h3>`);
-  }
-  parts.push(...module.blocks.map((block) => renderBlockBody(block)));
-  return parts.join("");
+function renderMarkdownLike(content) {
+  const escaped = escapeHtml(content);
+  return `<pre><code>${escaped}</code></pre>`;
 }
 
 function previewMarkup(documentModel) {
@@ -39,12 +25,19 @@ function previewMarkup(documentModel) {
         .map(
           (group) => `
             <section>
-              <h2>${escapeHtml(group.title)}</h2>
+              <h2>${escapeHtml(getGroupDisplayTitle(group))}</h2>
               ${group.notes.trim() ? `<div class="notes">${escapeHtml(group.notes)}</div>` : ""}
               <div class="question-label">Question</div>
               <p>${escapeHtml(group.question)}</p>
               <div class="answer-label">Answer</div>
-              ${group.modules.map((module) => renderModuleBody(module)).join("")}
+              ${group.modules
+                .map(
+                  (module) => `
+                    ${module.title && module.title !== "Response" ? `<h3>${escapeHtml(module.title)}</h3>` : ""}
+                    ${renderMarkdownLike(module.content || "")}
+                  `
+                )
+                .join("")}
             </section>
           `
         )

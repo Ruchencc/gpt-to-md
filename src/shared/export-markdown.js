@@ -1,25 +1,4 @@
-function renderBlock(block) {
-  if (block.type === "paragraph") {
-    return `${block.text}\n`;
-  }
-
-  if (block.type === "list") {
-    return block.items.map((item) => `- ${item}`).join("\n");
-  }
-
-  if (block.type === "quote") {
-    return block.text
-      .split("\n")
-      .map((line) => `> ${line}`)
-      .join("\n");
-  }
-
-  if (block.type === "code") {
-    return `\`\`\`\n${block.code}\n\`\`\``;
-  }
-
-  return "";
-}
+import { getGroupDisplayTitle } from "./group-title.js";
 
 function renderModule(module) {
   const lines = [];
@@ -28,8 +7,8 @@ function renderModule(module) {
     lines.push(`### ${module.title}`);
   }
 
-  lines.push(...module.blocks.map((block) => renderBlock(block)).filter(Boolean));
-  return lines.join("\n\n");
+  lines.push(module.content.trim());
+  return lines.filter(Boolean).join("\n\n");
 }
 
 export function exportMarkdown(documentModel) {
@@ -38,7 +17,7 @@ export function exportMarkdown(documentModel) {
   for (const group of documentModel.groups) {
     if (!group.included) continue;
 
-    sections.push(`## ${group.title}`);
+    sections.push(`## ${getGroupDisplayTitle(group)}`);
 
     if (group.notes.trim()) {
       sections.push(`_Notes:_ ${group.notes}`);
@@ -46,10 +25,7 @@ export function exportMarkdown(documentModel) {
 
     sections.push(`**Question**\n${group.question}`);
     sections.push(
-      [
-        "**Answer**",
-        ...group.modules.map((module) => renderModule(module))
-      ]
+      ["**Answer**", ...group.modules.map((module) => renderModule(module))]
         .filter(Boolean)
         .join("\n\n")
     );

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { exportMarkdown } from "../src/shared/export-markdown.js";
 
-test("exportMarkdown renders included groups and h2-level modules", () => {
+test("exportMarkdown renders included groups and markdown-backed modules", () => {
   const markdown = exportMarkdown({
     title: "Doc title",
     source: { site: "chatgpt", url: "https://chatgpt.com/c/example" },
@@ -16,17 +16,11 @@ test("exportMarkdown renders included groups and h2-level modules", () => {
         modules: [
           {
             title: "First module",
-            blocks: [
-              { type: "paragraph", text: "A kept paragraph." },
-              { type: "list", items: ["One", "Two"] }
-            ]
+            content: ["A kept paragraph.", "", "- One", "- Two"].join("\n")
           },
           {
             title: "Second module",
-            blocks: [
-              { type: "quote", text: "Quoted line" },
-              { type: "code", code: "const value = 1;" }
-            ]
+            content: ["> Quoted line", "", "```", "const value = 1;", "```"].join("\n")
           }
         ]
       },
@@ -35,7 +29,7 @@ test("exportMarkdown renders included groups and h2-level modules", () => {
         title: "Hidden section",
         notes: "",
         question: "Should not appear",
-        modules: [{ title: "Response", blocks: [{ type: "paragraph", text: "Nope" }] }]
+        modules: [{ title: "Response", content: "Nope" }]
       }
     ]
   });

@@ -8,90 +8,59 @@ function makeGroupTitle(questionText, index) {
   return normalized.slice(0, 72) + (normalized.length > 72 ? "..." : "");
 }
 
-function flushParagraphBuffer(blocks, paragraphBuffer) {
-  if (!paragraphBuffer.length) return;
+function blockToMarkdown(node) {
+  if (node.matches("pre")) {
+    return ["```", textFromNode(node), "```"].join("\n");
+  }
 
-  blocks.push({
-    id: `paragraph-${blocks.length + 1}`,
-    type: "paragraph",
-    text: paragraphBuffer.join("\n\n")
-  });
-  paragraphBuffer.length = 0;
+  if (node.matches("blockquote")) {
+    return textFromNode(node)
+      .split("\n")
+      .map((line) => `> ${line}`)
+      .join("\n");
+  }
+
+  if (node.matches("ul, ol")) {
+    return Array.from(node.querySelectorAll("li"))
+      .map((item, index) => (node.matches("ol") ? `${index + 1}. ${textFromNode(item)}` : `- ${textFromNode(item)}`))
+      .join("\n");
+  }
+
+  const text = textFromNode(node);
+  return text;
 }
 
 function pushModule(modules, currentModule) {
-  if (!currentModule.blocks.length) return;
+  const content = currentModule.parts.join("\n\n").trim();
+  if (!content) return;
 
   modules.push({
     id: `module-${modules.length + 1}`,
     title: currentModule.title || "Response",
-    blocks: [...currentModule.blocks]
+    content
   });
 
   currentModule.title = "Response";
-  currentModule.blocks = [];
+  currentModule.parts = [];
 }
 
 function modulesFromAssistantNode(node) {
   const modules = [];
-  const paragraphBuffer = [];
-  const currentModule = { title: "Response", blocks: [] };
+  const currentModule = { title: "Response", parts: [] };
 
-  function flushIntoCurrentModule() {
-    flushParagraphBuffer(currentModule.blocks, paragraphBuffer);
-  }
-
-  node.querySelectorAll("h2, h3, h4, p, pre, blockquote, ul, ol").forEach((child, index) => {
+  node.querySelectorAll("h2, h3, h4, p, pre, blockquote, ul, ol").forEach((child) => {
     if (child.matches("h2")) {
-      flushIntoCurrentModule();
       pushModule(modules, currentModule);
       currentModule.title = textFromNode(child) || `Section ${modules.length + 1}`;
       return;
     }
 
-    if (child.matches("h3, h4")) {
-      const headingText = textFromNode(child);
-      if (headingText) paragraphBuffer.push(headingText);
-      return;
-    }
-
-    if (child.matches("pre")) {
-      flushIntoCurrentModule();
-      currentModule.blocks.push({
-        id: `code-${index}`,
-        type: "code",
-        code: textFromNode(child)
-      });
-      return;
-    }
-
-    if (child.matches("blockquote")) {
-      flushIntoCurrentModule();
-      currentModule.blocks.push({
-        id: `quote-${index}`,
-        type: "quote",
-        text: textFromNode(child)
-      });
-      return;
-    }
-
-    if (child.matches("ul, ol")) {
-      flushIntoCurrentModule();
-      currentModule.blocks.push({
-        id: `list-${index}`,
-        type: "list",
-        items: Array.from(child.querySelectorAll("li")).map((item) => textFromNode(item))
-      });
-      return;
-    }
-
-    if (child.matches("p")) {
-      const paragraphText = textFromNode(child);
-      if (paragraphText) paragraphBuffer.push(paragraphText);
+    const markdown = blockToMarkdown(child);
+    if (markdown) {
+      currentModule.parts.push(markdown);
     }
   });
 
-  flushIntoCurrentModule();
   pushModule(modules, currentModule);
 
   if (!modules.length) {
@@ -100,7 +69,7 @@ function modulesFromAssistantNode(node) {
       modules.push({
         id: "module-1",
         title: "Response",
-        blocks: [{ id: "paragraph-1", type: "paragraph", text: fallbackText }]
+        content: fallbackText
       });
     }
   }
@@ -121,12 +90,13 @@ function extractChatGptConversation(document) {
     if (current.role !== "user") continue;
 
     const next = messages[index + 1];
+    const question = textFromNode(current.node);
     groups.push({
       id: `group-${groups.length + 1}`,
       included: true,
-      title: makeGroupTitle(textFromNode(current.node), groups.length),
+      title: makeGroupTitle(question, groups.length),
       notes: "",
-      question: textFromNode(current.node),
+      question,
       modules: next?.role === "assistant" ? modulesFromAssistantNode(next.node) : []
     });
   }
