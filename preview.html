@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>chat-to-md preview</title>
+    <link rel="stylesheet" href="./assets/app.css" />
+  </head>
+  <body>
+    <main class="preview-page-shell">
+      <section class="panel preview-page-panel">
+        <header class="panel-header">
+          <p class="eyebrow">Preview</p>
+          <h1 class="hero-title panel-title">Markdown preview in a dedicated tab.</h1>
+          <p class="subtle-copy">This page mirrors the current curated state from the side panel.</p>
+        </header>
+        <div class="preview-scroll" id="previewRoot"></div>
+      </section>
+    </main>
+    <script type="module" src="./src/preview/app.js"></script>
+  </body>
+</html>
