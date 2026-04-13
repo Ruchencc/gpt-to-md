@@ -1,6 +1,6 @@
 # chat-to-md
 
-Local-only Chrome MV3 extension for curating one ChatGPT or Qianwen conversation into Markdown.
+Local-only Chrome MV3 extension for curating one ChatGPT conversation into Markdown.
 
 ## Load Unpacked
 
