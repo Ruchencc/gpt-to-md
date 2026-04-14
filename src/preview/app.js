@@ -1,4 +1,5 @@
 import { getGroupDisplayTitle } from "../shared/group-title.js";
+import { renderMarkdown } from "../shared/render-markdown.js";
 
 const PREVIEW_STORAGE_KEY = "chat-export-preview-document";
 
@@ -9,11 +10,6 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
-}
-
-function renderMarkdownLike(content) {
-  const escaped = escapeHtml(content);
-  return `<pre><code>${escaped}</code></pre>`;
 }
 
 function previewMarkup(documentModel) {
@@ -34,7 +30,7 @@ function previewMarkup(documentModel) {
                 .map(
                   (module) => `
                     ${module.title && module.title !== "Response" ? `<h3>${escapeHtml(module.title)}</h3>` : ""}
-                    ${renderMarkdownLike(module.content || "")}
+                    ${renderMarkdown(module.content || "")}
                   `
                 )
                 .join("")}
